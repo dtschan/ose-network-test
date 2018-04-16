@@ -10,22 +10,32 @@ def ping():
 
     seq = 0
     while True:
-        sock.sendto("%r %r" % (seq, time.time()), server_address)
-        seq += 1
-        time.sleep(1)
+        try:
+            sock.send("%r %r" % (seq, time.time()))
+            seq += 1
+        except Exception as e:
+            pass
+        finally:
+            time.sleep(1)
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+#sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+server_address = ('ose-network-test', 10000)
+sock = None
 #sock.settimeout(10)
 
-try:
-    ping_thread = threading.Thread(target=ping)
-    ping_thread.setDaemon(True)
-    ping_thread.start()
+ping_thread = threading.Thread(target=ping)
+ping_thread.setDaemon(True)
+ping_thread.start()
 
-    last_seq = -1
-    last_hour = -1
-    lost_pkgs = 0
-    while True:
+last_seq = -1
+last_hour = -1
+lost_pkgs = 0
+while True:
+    try:
+        if not sock:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect(server_address)
+
         data, server = sock.recvfrom(4096)
         server_seq, start_time, server_time = data.split(' ')
         stop_time = time.time()
@@ -40,10 +50,14 @@ try:
         last_hour = hour
 
         if seq > last_seq + 1:
-          print '%s lost %d packages or packages out of order' % (time.ctime(stop_time), seq - last_seq - 1)
-          lost_pkgs += seq - last_seq - 1
-        print '%s %d %.2f %.2f' % (time.ctime(stop_time), seq, (server_time - start_time) * 1000.0, (stop_time - start_time) * 1000.0)
+            print '%s lost %d packages or packages out of order' % (time.ctime(stop_time), seq - last_seq - 1)
+            lost_pkgs += seq - last_seq - 1
         last_seq = seq
 
-finally:
-    sock.close()
+        print '%s %d %.2f %.2f' % (time.ctime(stop_time), seq, (server_time - start_time) * 1000.0, (stop_time - start_time) * 1000.0)
+
+    except Exception as e:
+        print '%s %s' % (time.ctime(), e)
+        time.sleep(1)
+        sock.close()
+        sock = None
